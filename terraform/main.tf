@@ -23,7 +23,7 @@ EOF
 
 resource "aws_iam_role_policy" "pathto_codepipeline_policy" {
   name = "AWSCodePipelineServiceRolePolicy-us-east-1-pathto-x"
-  role = "${aws_iam_role.pathto_codepipeline_role.id}"
+  role = aws_iam_role.pathto_codepipeline_role.id
 
   policy = <<EOF
 {
@@ -49,10 +49,10 @@ EOF
 
 resource "aws_codepipeline" "pathto_codepipeline" {
   name     = "pathto-x"
-  role_arn = "${aws_iam_role.pathto_codepipeline_role.arn}"
+  role_arn = aws_iam_role.pathto_codepipeline_role.arn
 
   artifact_store {
-    location = "${aws_s3_bucket.pathto_codepipeline_bucket.bucket}"
+    location = aws_s3_bucket.pathto_codepipeline_bucket.bucket
     type     = "S3"
 
   }
@@ -72,7 +72,7 @@ resource "aws_codepipeline" "pathto_codepipeline" {
         Owner  = "pathto-x"
         Repo   = "pathto-x.github.io"
         Branch = "master"
-        OAuthToken = "${var.github_oauth_token}"
+        OAuthToken = var.github_oauth_token
       }
     }
   }
@@ -89,7 +89,7 @@ resource "aws_codepipeline" "pathto_codepipeline" {
       version         = "1"
 
       configuration = {
-        BucketName = "${aws_s3_bucket.pathto_static_website_s3_bucket.id}"
+        BucketName = aws_s3_bucket.pathto_static_website_s3_bucket.id
         Extract = "true"
       }
     }
