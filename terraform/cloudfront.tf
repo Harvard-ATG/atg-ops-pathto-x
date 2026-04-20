@@ -2,6 +2,12 @@ locals {
   s3_origin_id = "myS3Origin"
 }
 
+data "aws_acm_certificate" "pathto" {
+  domain      = "path-to.org"
+  statuses    = ["ISSUED"]
+  most_recent = true
+}
+
 resource "aws_cloudfront_distribution" "s3_distribution" {
   origin {
     domain_name = aws_s3_bucket_website_configuration.pathto_static_website_s3_bucket.website_endpoint
@@ -70,7 +76,7 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = var.acm_certificate_arn
+    acm_certificate_arn      = data.aws_acm_certificate.pathto.arn
     minimum_protocol_version = "TLSv1.2_2021"
     ssl_support_method       = "sni-only"
   }
