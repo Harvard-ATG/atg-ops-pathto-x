@@ -48,9 +48,19 @@ resource "aws_iam_role_policy" "pathto_codepipeline_policy" {
           aws_s3_bucket.pathto_static_website_s3_bucket.arn,
           "${aws_s3_bucket.pathto_static_website_s3_bucket.arn}/*"
         ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["codeconnections:UseConnection"]
+        Resource = aws_codeconnections_connection.pathto_github.arn
       }
     ]
   })
+}
+
+resource "aws_codeconnections_connection" "pathto_github" {
+  name          = "pathto-x-github"
+  provider_type = "GitHub"
 }
 
 resource "aws_codepipeline" "pathto_codepipeline" {
@@ -68,16 +78,15 @@ resource "aws_codepipeline" "pathto_codepipeline" {
     action {
       name             = "Source"
       category         = "Source"
-      owner            = "ThirdParty"
-      provider         = "GitHub"
-      version          = "1"
+      owner            = "AWS"
+      provider         = "CodeStarSourceConnection"
+      version          = "2"
       output_artifacts = ["SourceArtifact"]
 
       configuration = {
-        Owner      = "pathto-x"
-        Repo       = "pathto-x.github.io"
-        Branch     = "master"
-        OAuthToken = var.github_oauth_token
+        ConnectionArn    = aws_codeconnections_connection.pathto_github.arn
+        FullRepositoryId = "pathto-x/pathto-x.github.io"
+        BranchName       = "main"
       }
     }
   }
