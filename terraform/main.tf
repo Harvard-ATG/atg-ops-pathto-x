@@ -80,7 +80,7 @@ resource "aws_codepipeline" "pathto_codepipeline" {
       category         = "Source"
       owner            = "AWS"
       provider         = "CodeStarSourceConnection"
-      version          = "2"
+      version          = "1"
       output_artifacts = ["SourceArtifact"]
 
       configuration = {
