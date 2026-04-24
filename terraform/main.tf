@@ -1,50 +1,66 @@
 resource "aws_s3_bucket" "pathto_codepipeline_bucket" {
-    bucket = "pathto-x-codepipeline-artifacts"
-    acl = "private"
+  bucket = "pathto-x-codepipeline-artifacts"
 }
+
+resource "aws_s3_bucket_public_access_block" "pathto_codepipeline_bucket" {
+  bucket                  = aws_s3_bucket.pathto_codepipeline_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 resource "aws_iam_role" "pathto_codepipeline_role" {
   name = "AWSCodePipelineServiceRole-us-east-1-pathto-x"
 
-  assume_role_policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "codepipeline.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
-    }
-  ]
-}
-EOF
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "codepipeline.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
 }
 
 resource "aws_iam_role_policy" "pathto_codepipeline_policy" {
   name = "AWSCodePipelineServiceRolePolicy-us-east-1-pathto-x"
   role = aws_iam_role.pathto_codepipeline_role.id
 
-  policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect":"Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:GetObjectVersion",
-        "s3:GetBucketVersioning",
-        "s3:PutObject"
-      ],
-      "Resource": [
-        "${aws_s3_bucket.pathto_codepipeline_bucket.arn}",
-        "${aws_s3_bucket.pathto_codepipeline_bucket.arn}/*"
-      ]
-    }
-  ]
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion",
+          "s3:GetBucketVersioning",
+          "s3:PutObject"
+        ]
+        Resource = [
+          aws_s3_bucket.pathto_codepipeline_bucket.arn,
+          "${aws_s3_bucket.pathto_codepipeline_bucket.arn}/*",
+          aws_s3_bucket.pathto_static_website_s3_bucket.arn,
+          "${aws_s3_bucket.pathto_static_website_s3_bucket.arn}/*"
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["codeconnections:UseConnection"]
+        Resource = aws_codeconnections_connection.pathto_github.arn
+      }
+    ]
+  })
 }
-EOF
+
+resource "aws_codeconnections_connection" "pathto_github" {
+  name          = "pathto-x-github"
+  provider_type = "GitHub"
 }
 
 resource "aws_codepipeline" "pathto_codepipeline" {
@@ -54,7 +70,6 @@ resource "aws_codepipeline" "pathto_codepipeline" {
   artifact_store {
     location = aws_s3_bucket.pathto_codepipeline_bucket.bucket
     type     = "S3"
-
   }
 
   stage {
@@ -63,16 +78,15 @@ resource "aws_codepipeline" "pathto_codepipeline" {
     action {
       name             = "Source"
       category         = "Source"
-      owner            = "ThirdParty"
-      provider         = "GitHub"
+      owner            = "AWS"
+      provider         = "CodeStarSourceConnection"
       version          = "1"
       output_artifacts = ["SourceArtifact"]
 
       configuration = {
-        Owner  = "pathto-x"
-        Repo   = "pathto-x.github.io"
-        Branch = "master"
-        OAuthToken = var.github_oauth_token
+        ConnectionArn    = aws_codeconnections_connection.pathto_github.arn
+        FullRepositoryId = "pathto-x/pathto-x.github.io"
+        BranchName       = "main"
       }
     }
   }
@@ -90,7 +104,7 @@ resource "aws_codepipeline" "pathto_codepipeline" {
 
       configuration = {
         BucketName = aws_s3_bucket.pathto_static_website_s3_bucket.id
-        Extract = "true"
+        Extract    = "true"
       }
     }
   }
@@ -98,23 +112,36 @@ resource "aws_codepipeline" "pathto_codepipeline" {
 
 resource "aws_s3_bucket" "pathto_static_website_s3_bucket" {
   bucket = "pathto-x"
-  acl    = "public-read"
-  policy = <<EOF
-{
-    "Version":"2012-10-17",
-    "Statement":[
-      {
-        "Sid":"PublicRead",
-        "Effect":"Allow",
-        "Principal": "*",
-        "Action":["s3:GetObject", "s3:PutObject"],
-        "Resource":["arn:aws:s3:::pathto-x/*"]
-      }
-    ]
-}
-EOF
-  website {
-    index_document = "index.html"
-  }
 }
 
+resource "aws_s3_bucket_public_access_block" "pathto_static_website_s3_bucket" {
+  bucket                  = aws_s3_bucket.pathto_static_website_s3_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_policy" "pathto_static_website_s3_bucket" {
+  depends_on = [aws_s3_bucket_public_access_block.pathto_static_website_s3_bucket]
+  bucket     = aws_s3_bucket.pathto_static_website_s3_bucket.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowCloudFront"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudfront.amazonaws.com"
+        }
+        Action   = ["s3:GetObject"]
+        Resource = ["${aws_s3_bucket.pathto_static_website_s3_bucket.arn}/*"]
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = aws_cloudfront_distribution.s3_distribution.arn
+          }
+        }
+      }
+    ]
+  })
+}
